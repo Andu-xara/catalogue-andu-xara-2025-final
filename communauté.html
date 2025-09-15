@@ -3,170 +3,79 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Communauté Andu-Xara</title>
+<title>Communauté Andu-Xara - Recommandations</title>
 <style>
 body { font-family:'Segoe UI', sans-serif; background:#f4f4f4; margin:0; padding:20px; }
-h1 { text-align:center; color:#667eea; margin-bottom:10px; }
-form, .post-card, #authContainer { background:white; padding:15px; border-radius:12px; margin-bottom:20px; box-shadow:0 5px 15px rgba(0,0,0,0.1);}
+h1 { text-align:center; color:#667eea; margin-bottom:20px; }
+form, .post-card { background:white; padding:15px; border-radius:12px; margin-bottom:20px; box-shadow:0 5px 15px rgba(0,0,0,0.1);}
 input, textarea, button { width:100%; padding:10px; margin:5px 0; border-radius:6px; border:1px solid #ccc; box-sizing:border-box; }
 button { background:#667eea; color:white; border:none; cursor:pointer; font-weight:bold; transition:0.3s; }
 button:hover { background:#5566cc; }
-
 .posts-container { display:flex; flex-direction:column; gap:20px; }
-.post-card { opacity:0; transform:translateY(20px); animation: fadeIn 0.5s forwards; }
-.post-card img { max-width:100%; border-radius:8px; margin-top:10px; display:block; }
-.like-btn { margin-top:10px; padding:5px 10px; background:#ffdd57; border:none; border-radius:6px; cursor:pointer; font-weight:bold; }
-.like-btn.liked { background:#ffb800; cursor:default; }
-
-.comments { margin-top:15px; padding-top:10px; border-top:1px solid #ccc; }
-.comment { margin-bottom:10px; padding:5px; background:#f9f9f9; border-radius:6px; }
-.comment strong { color:#333; }
-.comment small { color:#666; font-size:0.7em; }
-
-#userStatus { text-align:right; margin-bottom:10px; }
-#loadMore { margin:20px auto; display:block; padding:10px 20px; border:none; border-radius:6px; background:#667eea; color:white; cursor:pointer; }
-
-@keyframes fadeIn { to { opacity:1; transform:translateY(0); } }
+.post-card h3 { margin:0 0 5px 0; color:#333; }
+.post-card p { margin:0; }
+small { color:#666; font-size:0.8em; }
 </style>
 </head>
 <body>
 
 <h1>Communauté Andu-Xara</h1>
 
-<div id="userStatus">Non connecté</div>
-
-<div id="authContainer">
-  <h3>Connexion / Inscription</h3>
-  <input type="email" id="authEmail" placeholder="Email" required>
-  <input type="password" id="authPassword" placeholder="Mot de passe" required>
-  <button id="loginBtn">Se connecter</button>
-  <button id="signupBtn">S’inscrire</button>
-</div>
-
-<form id="postForm" style="display:none;">
-  <textarea id="message" placeholder="Votre témoignage" required></textarea>
-  <input type="file" id="image">
+<form id="postForm">
+  <input type="text" id="name" placeholder="Votre nom" required>
+  <textarea id="message" placeholder="Votre recommandation ou conseil" required></textarea>
   <button type="submit">Publier</button>
 </form>
 
 <div class="posts-container" id="postsContainer"></div>
-<button id="loadMore">Charger plus</button>
-
-<script src="https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js"></script>
-<script src="https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js"></script>
-<script src="https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js"></script>
 
 <script>
-// 🔹 Configuration Firebase
-const firebaseConfig = {
-  apiKey: "AIzaSyAhvPhjuB9BlsiOl8HPV6OCdYum_jW40wQ",
-  authDomain: "blogcommunautaire.firebaseapp.com",
-  projectId: "blogcommunautaire",
-  storageBucket: "blogcommunautaire.appspot.com",
-  messagingSenderId: "913633253933",
-  appId: "1:913633253933:web:756e756e38cdddcf9876a4"
-};
-
-// 🔹 Initialisation Firebase
-const app = firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-const storage = firebase.storage();
-const auth = firebase.auth();
-
-const userStatus = document.getElementById("userStatus");
 const postForm = document.getElementById("postForm");
+const postsContainer = document.getElementById("postsContainer");
 
-// 🔹 Authentification
-document.getElementById("signupBtn").addEventListener("click", async ()=>{
-  const email = document.getElementById("authEmail").value.trim();
-  const pass = document.getElementById("authPassword").value.trim();
-  if(!email||!pass) return alert("Email et mot de passe requis");
-  try{ await auth.createUserWithEmailAndPassword(email,pass); alert("Inscription réussie"); }
-  catch(e){ alert(e.message); }
-});
+// Charger les posts depuis localStorage
+let posts = JSON.parse(localStorage.getItem("posts")) || [];
 
-document.getElementById("loginBtn").addEventListener("click", async ()=>{
-  const email = document.getElementById("authEmail").value.trim();
-  const pass = document.getElementById("authPassword").value.trim();
-  if(!email||!pass) return alert("Email et mot de passe requis");
-  try{ await auth.signInWithEmailAndPassword(email,pass); alert("Connexion réussie"); }
-  catch(e){ alert(e.message); }
-});
-
-auth.onAuthStateChanged(user=>{
-  if(user){
-    userStatus.innerHTML = Connecté : ${user.email} | <a href="#" id="logout">Se déconnecter</a>;
-    document.getElementById("authContainer").style.display="none";
-    postForm.style.display="block";
-    document.getElementById("logout").addEventListener("click", async e=>{
-      e.preventDefault();
-      await auth.signOut();
-    });
-    loadPosts();
-  } else {
-    userStatus.textContent = "Non connecté";
-    document.getElementById("authContainer").style.display="block";
-    postForm.style.display="none";
-    document.getElementById("postsContainer").innerHTML = "";
-  }
-});
-
-// 🔹 Publication de post
-postForm.addEventListener("submit", async e=>{
-  e.preventDefault();
-  const user = auth.currentUser;
-  if(!user) return alert("Connectez-vous pour publier");
-  const message = document.getElementById("message").value.trim();
-  const imageFile = document.getElementById("image").files[0];
-  if(!message) return alert("Message requis");
-
-  let imageUrl="";
-  if(imageFile){ 
-    const storageRef = storage.ref("images/"+Date.now()+"_"+imageFile.name);
-    await storageRef.put(imageFile);
-    imageUrl = await storageRef.getDownloadURL();
-  }
-
-  await db.collection("posts").add({
-    uid: user.uid,
-    email: user.email,
-    message,
-    imageUrl,
-    likes: 0,
-    date: new Date()
-  });
-
-  postForm.reset();
-  alert("Post publié !");
-  loadPosts();
-});
-
-// 🔹 Chargement des posts
-let postsLimit = 10;
-async function loadPosts(){
-  const snapshot = await db.collection("posts").orderBy("date","desc").limit(postsLimit).get();
-  const container = document.getElementById("postsContainer");
-  container.innerHTML="";
-  snapshot.forEach(doc=>{
-    const data = doc.data();
-    const postHTML = document.createElement("div");
-    postHTML.className = "post-card";
-    postHTML.innerHTML = `
-      <p><strong>${data.email}</strong> : ${data.message}</p>
-      ${data.imageUrl ? <img loading="lazy" src="${data.imageUrl}"> : ""}
-      <small>Publié le : ${new Date(data.date.seconds*1000).toLocaleString()}</small>
+// Fonction pour afficher les posts
+function renderPosts() {
+  postsContainer.innerHTML = "";
+  posts.slice().reverse().forEach(post => {
+    const card = document.createElement("div");
+    card.className = "post-card";
+    card.innerHTML = `
+      <h3>${post.name}</h3>
+      <p>${post.message}</p>
+      <small>Publié le : ${post.date}</small>
     `;
-    container.appendChild(postHTML);
+    postsContainer.appendChild(card);
   });
 }
 
-// 🔹 Charger plus
-document.getElementById("loadMore").addEventListener("click", ()=>{
-  postsLimit += 10;
-  loadPosts();
+// Ajouter un nouveau post
+postForm.addEventListener("submit", e => {
+  e.preventDefault();
+  
+  const name = document.getElementById("name").value.trim();
+  const message = document.getElementById("message").value.trim();
+  
+  if(!name || !message) return alert("Veuillez remplir tous les champs.");
+
+  const newPost = {
+    name,
+    message,
+    date: new Date().toLocaleString()
+  };
+
+  posts.push(newPost);
+  localStorage.setItem("posts", JSON.stringify(posts));
+
+  renderPosts();
+  postForm.reset();
 });
 
+// Afficher les posts au chargement
+renderPosts();
 </script>
+
 </body>
 </html>
